@@ -1,8 +1,8 @@
 import http from 'k6/http';
 import { check } from 'k6';
-import { BASE_URL, TEST_PASSWORD, HTTP_TIMEOUT } from './config.js';
+import { BASE_URL, TEST_USER_PASSWORD, HTTP_TIMEOUT } from './config.js';
 
-export function login(username, password = TEST_PASSWORD) {
+export function login(username, password = TEST_USER_PASSWORD) {
     const payload = JSON.stringify({ username, password });
 
     const params = {
@@ -19,8 +19,6 @@ export function login(username, password = TEST_PASSWORD) {
     check(res, {
         'login status is 200': (r) => r.status === 200,
     });
-
-    // console.log(`login status=${res.status} body="${res.body}"`);
 
     if (res.status !== 200 || !res.body || !String(res.body).trim()) {
         return {
