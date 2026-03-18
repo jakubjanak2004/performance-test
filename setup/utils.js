@@ -6,11 +6,6 @@ export function authHeaders(token) {
         },
     };
 }
-
-export function uniqueUsername(vu, iter, prefix = 'loaduser') {
-    return `${prefix}_${vu}_${iter}`;
-}
-
 export function nowMs() {
     return Date.now();
 }

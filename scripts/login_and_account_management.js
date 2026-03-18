@@ -1,8 +1,8 @@
-import {login} from "../setup/auth.js";
+import {loginOrSignup} from "../setup/auth.js";
 import {loadChats} from "../setup/chats.js";
-import { Trend, Rate } from 'k6/metrics';
+import {Rate} from 'k6/metrics';
 import {loadProfile, loadUsers, updateProfile} from "../setup/users.js";
-import {OPTIONS, STEP_TIME, TEST_USER_1_USERNAME} from "../setup/config.js";
+import {OPTIONS, TEST_USER_PREFIX, TEST_USER_USERNAME_START} from "../setup/config.js";
 
 // todo determine if use round duration
 // const roundDuration = new Trend('round_duration');
@@ -11,9 +11,7 @@ const roundFailRate = new Rate('round_fail_rate');
 export const options = OPTIONS
 
 export default function () {
-    // login
-    const loginResult = login(TEST_USER_1_USERNAME);
-    const token = loginResult?.token;
+    const token = loginOrSignup(`${TEST_USER_PREFIX}${TEST_USER_USERNAME_START + (__VU - 1)}`);
 
     if (!token) {
         roundFailRate.add(1);
@@ -21,10 +19,10 @@ export default function () {
     }
 
     // load chats
-    loadChats(token)
+    loadChats(token, {sort: "name,asc"})
 
     // load users
-    loadUsers(token)
+    loadUsers(token, {sort: "username,asc"})
 
     // load profile
     loadProfile(token)
@@ -32,8 +30,8 @@ export default function () {
     // change firstName, lastName, email
     updateProfile(
         token,
-        "toto new first name",
-        "todo new last name",
-        "newEmail@gmail.com"
+        `toto new first name ${Math.random()}`,
+        `todo new last name ${Math.random()}`,
+        `newEmail${Math.random()}@gmail.com`
     )
 }

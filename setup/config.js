@@ -1,11 +1,13 @@
-export const BASE_URL = __ENV.BASE_URL || 'http://localhost:8090';
-export const WS_URL = __ENV.WS_URL || 'ws://localhost:8090/ws';
+export const BASE_URL = __ENV.BASE_URL || 'http://178.104.73.186:8090';
+export const WS_URL = __ENV.WS_URL || 'ws://178.104.73.186:8090/ws';
 
-export const TEST_USER_1_USERNAME = __ENV.TEST_USER_1_USERNAME || 'test1';
-export const TEST_USER_2_USERNAME = __ENV.TEST_USER_2_USERNAME || 'test2';
-export const TEST_USER_PASSWORD = __ENV.TEST_PASSWORD || 'test';
+export const TEST_USER_PREFIX = __ENV.TEST_USER_PREFIX || "test";
+export const TEST_USER_USERNAME_START = __ENV.TEST_USER_USERNAME_START || 3
+export const TEST_USER_1_USERNAME = __ENV.TEST_USER_1_USERNAME || `${TEST_USER_PREFIX}1`;
+export const TEST_USER_2_USERNAME = __ENV.TEST_USER_2_USERNAME || `${TEST_USER_PREFIX}2`;
+export const TEST_USER_PASSWORD = __ENV.TEST_PASSWORD || 'testing';
 
-export const STEP_TIME = __ENV.STEP_TIME || "5m";
+export const STEP_TIME = __ENV.STEP_TIME || "1m";
 export const WAIT_SECONDS = __ENV.WAIT_SECONDS || 2
 
 // Messaging scenario tuning
@@ -21,9 +23,9 @@ export const OPTIONS = {
         { duration: STEP_TIME, target: 5 },
         { duration: STEP_TIME, target: 10 },
         { duration: STEP_TIME, target: 20 },
-        { duration: STEP_TIME, target: 30 },
         { duration: STEP_TIME, target: 40 },
-        { duration: STEP_TIME, target: 30 },
+        { duration: STEP_TIME, target: 80 },
+        { duration: STEP_TIME, target: 40 },
         { duration: STEP_TIME, target: 20 },
         { duration: STEP_TIME, target: 10 },
         { duration: STEP_TIME, target: 5 },
