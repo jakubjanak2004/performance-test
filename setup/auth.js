@@ -9,27 +9,28 @@ import {
     TEST_USER_1_USERNAME
 } from './config.js';
 
-let cachedToken = null;
+const cachedTokensByUsername = Object.create(null);
 
 export function loginOrSignup(username) {
-    if (cachedToken) return cachedToken;
+    const key = String(username || '').trim() || TEST_USER_1_USERNAME;
+    if (cachedTokensByUsername[key]) return cachedTokensByUsername[key];
 
     // Ensure user exists: try signup first.
-    const signUpRes = signUp({ username });
+    const signUpRes = signUp({ username: key });
     if (signUpRes && signUpRes.status === 200) {
         try {
             const body = signUpRes.json();
-            cachedToken = body.token || null;
-            return cachedToken;
+            cachedTokensByUsername[key] = body.token || null;
+            return cachedTokensByUsername[key];
         } catch (_) {
             // fall through to login
         }
     }
 
     // If user already exists (409) or signup didn't return a token, login.
-    const loginResult = login(username || TEST_USER_1_USERNAME);
-    cachedToken = loginResult.token || null;
-    return cachedToken;
+    const loginResult = login(key);
+    cachedTokensByUsername[key] = loginResult.token || null;
+    return cachedTokensByUsername[key];
 }
 
 export function login(username, password = TEST_USER_PASSWORD) {

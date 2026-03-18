@@ -23,4 +23,4 @@ SCRIPT_PATH="${1:-scripts/send_and_receive_messages.js}"
 # Override by setting K6_PROMETHEUS_RW_SERVER_URL explicitly.
 K6_PROMETHEUS_RW_SERVER_URL="${K6_PROMETHEUS_RW_SERVER_URL:-http://178.104.69.73:9090/api/v1/write}"
 
-k6 run -o experimental-prometheus-rw "${SCRIPT_PATH}"
+K6_PROMETHEUS_RW_SERVER_URL="${K6_PROMETHEUS_RW_SERVER_URL}" k6 run -o experimental-prometheus-rw "${SCRIPT_PATH}"

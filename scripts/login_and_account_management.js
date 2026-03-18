@@ -11,6 +11,7 @@ const roundFailRate = new Rate('round_fail_rate');
 export const options = OPTIONS
 
 export default function () {
+    // todo use setup() instead of checking every round
     const token = loginOrSignup(`${TEST_USER_PREFIX}${TEST_USER_USERNAME_START + (__VU - 1)}`);
 
     if (!token) {
