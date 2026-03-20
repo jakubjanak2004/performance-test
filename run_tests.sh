@@ -18,9 +18,10 @@ set -euo pipefail
 # This wrapper only selects the script + enables remote-write output.
 
 SCRIPT_PATH="${1:-scripts/send_and_receive_messages.js}"
+K6_BIN="${K6_BIN:-k6}"
 
 # Always send k6 metrics to Prometheus remote-write by default.
 # Override by setting K6_PROMETHEUS_RW_SERVER_URL explicitly.
 K6_PROMETHEUS_RW_SERVER_URL="${K6_PROMETHEUS_RW_SERVER_URL:-http://178.104.69.73:9090/api/v1/write}"
 
-K6_PROMETHEUS_RW_SERVER_URL="${K6_PROMETHEUS_RW_SERVER_URL}" k6 run -o experimental-prometheus-rw "${SCRIPT_PATH}"
+K6_PROMETHEUS_RW_SERVER_URL="${K6_PROMETHEUS_RW_SERVER_URL}" "${K6_BIN}" run -o experimental-prometheus-rw "${SCRIPT_PATH}"
