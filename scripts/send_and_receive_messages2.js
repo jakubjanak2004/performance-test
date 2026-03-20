@@ -1,31 +1,19 @@
 import {
     MESSAGES_PER_ITER,
-    SENDER_MAX_VUS,
     TEST_DURATION,
     TEST_USER_PREFIX,
     TEST_USER_USERNAME_START,
-    WS_RECEIVER_VUS
+    WS_RECEIVER_PING_SECONDS,
+    WS_RECEIVER_VUS,
+    WS_WAIT_TIMEOUT_MS
 } from "../setup/config.js";
-import {parseDurationSeconds} from "../setup/utils.js";
+import {check, sleep} from "k6";
 import {createChat, sendMessage} from "../setup/chats.js";
 import {loginOrSignup} from "../setup/auth.js";
+import {connectAndSubscribe, fetchAllMessagesForChat, randomId, waitUntil} from "../setup/ws.js";
+import { parseDurationSeconds } from "../setup/utils.js";
 
-function defaultSenderStages(totalDuration) {
-    // Ramp up 10%, hold 80%, ramp down 10% (in terms of time).
-    const totalSec = parseDurationSeconds(totalDuration);
-
-    const rampSec = Math.max(1, Math.floor(totalSec * 0.1));
-    const holdSec = Math.max(1, Math.floor(totalSec * 0.8));
-    const downSec = Math.max(1, totalSec - rampSec - holdSec);
-    const max = SENDER_MAX_VUS;
-
-    return [
-        { duration: `${rampSec}s`, target: max },
-        { duration: `${holdSec}s`, target: max },
-        { duration: `${downSec}s`, target: 0 },
-    ];
-}
-
+// todo make vus grow gradually, steps
 export const options = {
     scenarios: {
         ws_receivers: {
@@ -35,16 +23,14 @@ export const options = {
             exec: "wsReceivers",
         },
         http_senders: {
-            executor: "ramping-vus",
-            startVUs: 0,
-            stages: defaultSenderStages(TEST_DURATION),
-            gracefulRampDown: "30s",
+            executor: "constant-vus",
+            vus: WS_RECEIVER_VUS,
+            duration: TEST_DURATION,
             exec: "httpSenders",
         },
     },
 };
 
-const expectedIds = new Set();
 
 export function setup() {
     // setup users
@@ -62,8 +48,14 @@ export function setup() {
     const ownerUsername = memberUsernames[0];
     const ownerToken = tokensByUsername[ownerUsername];
     const chat = createChat(ownerToken, memberUsernames.slice(1), { name: "k6-big-group" });
+    const runTag = `k6run-${Date.now()}-${randomId(6)}`;
 
-    return { chatId: chat?.id || null, tokensByUsername, memberUsernames };
+    return {
+        chatId: chat.id,
+        tokensByUsername,
+        memberUsernames,
+        runTag
+    };
 }
 
 export function httpSenders(data) {
@@ -83,16 +75,62 @@ export function httpSenders(data) {
     // sending messages to a chat
     for (let i = 0; i < MESSAGES_PER_ITER; i++) {
         const replyToId = null;
-        const sentMessage = sendMessage(token, chatId, `${i}`, replyToId);
-        if (sentMessage?.id) {
-            expectedIds.add(String(sentMessage.id));
-            const replySent = sendMessage(token, chatId, `reply to ${i}`, replyToId);
-            if (replySent?.id) expectedIds.add(String(replySent.id));
-        }
+        const baseContent = `${data.runTag}|vu=${__VU}|iter=${__ITER}|msg=${i}`;
+        const sentMessage = sendMessage(token, chatId, baseContent, replyToId);
+        if (!sentMessage?.id) continue;
+        sendMessage(token, chatId, `${data.runTag}|vu=${__VU}|iter=${__ITER}|reply=${i}`, sentMessage.id);
     }
 }
 
-// TODO: add weboskcet listening on chat and ensure that the messages arrive
 export function wsReceivers(data) {
-    // data is what setup() returned
+    const username = data.memberUsernames[__VU - 1];
+    const token = data.tokensByUsername[username];
+    if (!token || !data.chatId) return;
+    const receivedWsIds = new Set();
+
+    const conn = connectAndSubscribe(token, (msg) => {
+        // Only observe this test run payloads.
+        if (!msg || msg.chatId !== data.chatId) return;
+        if (typeof msg.content !== "string") return;
+        if (!msg.content.startsWith(data.runTag)) return;
+        if (msg.id !== undefined && msg.id !== null) {
+            receivedWsIds.add(String(msg.id));
+        }
+    });
+
+    const wsReady = waitUntil(() => conn.subscribed && !conn.closed, WS_WAIT_TIMEOUT_MS);
+    check({ wsReady }, { "ws receiver: subscribed": (r) => r.wsReady === true });
+    if (!wsReady) return;
+
+    // Leave buffer before scenario hard-stop so validation can run.
+    const receiverDurationMs = Math.max(1, Math.floor(parseDurationSeconds(TEST_DURATION) * 1000));
+    const shutdownBufferMs = 5000;
+    const runForMs = Math.max(1000, receiverDurationMs - shutdownBufferMs);
+    const endAt = Date.now() + runForMs;
+    while (!conn.closed && Date.now() < endAt) {
+        sleep(Math.max(1, WS_RECEIVER_PING_SECONDS || 1));
+    }
+
+    // End receiver cleanly, allow in-flight frames, then compare WS-delivered IDs with chat history IDs.
+    try { conn.ws.close(); } catch (_) {}
+    sleep(1);
+
+    const chatMessages = fetchAllMessagesForChat(token, data.chatId);
+    const expectedIds = new Set(
+        chatMessages
+            .filter((m) => typeof m?.content === "string" && m.content.startsWith(data.runTag))
+            .map((m) => String(m.id))
+    );
+
+    let missingCount = 0;
+    for (const id of expectedIds) {
+        if (!receivedWsIds.has(id)) missingCount += 1;
+    }
+
+    check(
+        { expected: expectedIds.size, received: receivedWsIds.size, missing: missingCount },
+        {
+            "ws receiver: all run-tagged chat messages received": (r) => r.expected > 0 && r.missing === 0,
+        }
+    );
 }
