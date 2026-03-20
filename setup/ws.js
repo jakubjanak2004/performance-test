@@ -1,7 +1,6 @@
-import http from "k6/http";
-import {BASE_URL} from "./config.js";
+import {WS_URL} from "./config.js";
+import ws from "k6/ws";
 
-// todo move elsewhere
 export function randomId(len = 8) {
     const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
     let out = "";
@@ -16,25 +15,48 @@ export function stompFrame(cmd, headers = {}, body = "") {
     return out;
 }
 
-// todo move to chats.js
-export function fetchAllMessagesForChat(token, chatId) {
-    const all = [];
-    let page = 0;
-    const size = 200;
-    while (true) {
-        const res = http.get(
-            `${BASE_URL}/chats/${chatId}/messages?page=${page}&size=${size}&sort=created,asc`,
-            {headers: {Authorization: `Bearer ${token}`}, tags: {name: "loadMessagesForChat"}}
-        );
-        console.log('res', res);
-        if (res.status !== 200) break;
-        const content = res.json("content");
-        if (!Array.isArray(content) || content.length === 0) break;
-        all.push(...content);
-        const isLast = res.json("last");
-        if (isLast) break;
-        page += 1;
-    }
-    console.log('all', all);
-    return all;
+export function connectToWsEndpoint(token, username, destination, closeAfter, onSubscribed, onMessage, onError, onClosed) {
+    return ws.connect(
+        WS_URL,
+        {headers: {Authorization: `Bearer ${token}`}},
+        (socket) => {
+            socket.on("open", () => {
+                const connectFrame = stompFrame("CONNECT", {
+                    "accept-version": "1.2",
+                    "heart-beat": "10000,10000",
+                    Authorization: `Bearer ${token}`,
+                });
+                socket.send(connectFrame);
+            });
+
+            socket.on("message", (raw) => {
+                if (raw.startsWith("CONNECTED")) {
+                    socket.send(stompFrame("SUBSCRIBE", {
+                        id: `sub-${randomId(6)}`,
+                        destination: destination,
+                        ack: "auto",
+                    }));
+                    onSubscribed()
+                }
+                if (raw.startsWith("MESSAGE")) {
+                    const start = raw.indexOf("{");
+                    const end = raw.lastIndexOf("}");
+
+                    if (start !== -1 && end !== -1 && end > start) {
+                        const rawJSON = raw.substring(start, end + 1);
+                        const data = JSON.parse(rawJSON);
+                        onMessage(data)
+                    }
+                }
+            });
+
+            socket.on("error", (e) => onError(e));
+
+            socket.on("close", () => onClosed());
+
+            socket.setTimeout(() => {
+                socket.close();
+            }, closeAfter);
+        }
+    );
 }

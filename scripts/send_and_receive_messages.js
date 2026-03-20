@@ -3,19 +3,18 @@ import {
     TEST_DURATION,
     TEST_USER_PREFIX,
     TEST_USER_USERNAME_START,
-    WS_URL,
     WS_RECEIVER_VUS
 } from "../setup/config.js";
 import {check, sleep} from "k6";
-import ws from "k6/ws";
-import {createChat, sendMessage} from "../setup/chats.js";
+import {chatMessagesCount, createChat, fetchAllMessagesForChat, sendMessage} from "../setup/chats.js";
 import {loginOrSignup} from "../setup/auth.js";
-import {fetchAllMessagesForChat, randomId, stompFrame} from "../setup/ws.js";
+import {connectToWsEndpoint, randomId} from "../setup/ws.js";
 import {parseDurationSeconds} from "../setup/utils.js";
 
-const HTTP_SENDERS_START_SECONDS = 1;
-const TEST_DURATION_SECONDS = Math.max(1, Math.floor(parseDurationSeconds(TEST_DURATION)));
-const HTTP_SENDERS_DURATION_SECONDS = Math.max(1, TEST_DURATION_SECONDS - HTTP_SENDERS_START_SECONDS);
+// todo move to config file
+const HTTP_SENDERS_START_SECONDS = 2;
+const BUFFER_SECONDS = 2;
+const testDurationReceiversSeconds = parseDurationSeconds(TEST_DURATION) + HTTP_SENDERS_START_SECONDS + BUFFER_SECONDS
 
 // todo make vus grow gradually, steps
 export const options = {
@@ -23,14 +22,14 @@ export const options = {
         ws_receivers: {
             executor: "constant-vus",
             vus: WS_RECEIVER_VUS,
-            duration: `${TEST_DURATION_SECONDS}s`,
+            duration: `${testDurationReceiversSeconds}s`,
             exec: "wsReceivers",
         },
         http_senders: {
             executor: "constant-vus",
             vus: WS_RECEIVER_VUS,
             startTime: `${HTTP_SENDERS_START_SECONDS}s`,
-            duration: `${HTTP_SENDERS_DURATION_SECONDS}s`,
+            duration: TEST_DURATION,
             exec: "httpSenders",
         },
     },
@@ -89,94 +88,42 @@ export function httpSenders(data) {
     sleep(1);
 }
 
+// todo split the test to two, the senders and receivers so that there could be a different number of both
 export function wsReceivers(data) {
     const username = data.memberUsernames[(__VU - 1) % data.memberUsernames.length];
     const token = data.tokensByUsername[username];
-    const receivedWsIds = new Set();
+    let messagesReceived = 0;
     let subscribed = false;
-    const receiverDurationMs = parseDurationSeconds(TEST_DURATION) * 1000;
 
-    // todo move to ws or messages
-    const res = ws.connect(
-        WS_URL,
-        {headers: {Authorization: `Bearer ${token}`}},
-        (socket) => {
-            socket.on("open", () => {
-                const connectFrame = stompFrame("CONNECT", {
-                    "accept-version": "1.2",
-                    "heart-beat": "10000,10000",
-                    Authorization: `Bearer ${token}`,
-                });
-                socket.send(connectFrame);
-            });
-
-            socket.on("message", (raw) => {
-                if (raw.startsWith("CONNECTED")) {
-                    // console.log('received connected frame')
-                    socket.send(stompFrame("SUBSCRIBE", {
-                        id: `sub-${randomId(6)}`,
-                        destination: "/user/queue/messages",
-                        ack: "auto",
-                    }));
-                    subscribed = true;
-                }
-                if (raw.startsWith("MESSAGE")) {
-                    const start = raw.indexOf("{");
-                    const end = raw.lastIndexOf("}");
-
-                    if (start !== -1 && end !== -1 && end > start) {
-                        const rawJSON = raw.substring(start, end + 1);
-                        const data = JSON.parse(rawJSON);
-                        if (data.id) {
-                            // register incoming message
-                            receivedWsIds.add(String(data.id))
-                            // console.log('adding to receivedWsIds', data.id)
-                        }
-                    }
-                }
-            });
-
-            socket.on("error", (e) => console.error(`[WS ERROR] user=${username}`, e));
-            socket.on("close", () => console.log(`[WS CLOSED] user=${username}`));
-
-            socket.setTimeout(() => {
-                socket.close();
-            }, receiverDurationMs);
-        }
-    );
-
-    // console.log(`[WS] url=${WS_URL}`);
-    // console.log(`[WS] handshake status=${res && res.status}`);
-    // if (res && res.error) console.log(`[WS] handshake error=${res.error}`);
-    // if (res && res.body) console.log(`[WS] handshake body=${String(res.body).slice(0, 300)}`);
-
+    const res = connectToWsEndpoint(
+        token,
+        username,
+        "/user/queue/messages",
+        testDurationReceiversSeconds * 1000,
+        () => subscribed = true,
+        (message) => {
+            if (message.id) {
+                // register incoming message
+                // console.log('username', username, 'message.id', message.id)
+                messagesReceived++;
+            }
+        },
+        (error) => {
+            console.error(`[WS ERROR] user=${username}`, error)
+        },
+        () => {
+            console.log(`[WS CLOSED] user=${username}`)
+            subscribed = false
+        })
 
     check(res, {"ws connect: status 101": (r) => r && r.status === 101});
-    check({subscribed}, {"ws receiver: subscribed": (r) => r.subscribed === true});
 
-    // sleep until test finished
-    sleep(parseDurationSeconds(TEST_DURATION));
+    const messagesCount = chatMessagesCount(token, data.chatId)
+    console.log('messagesCount', messagesCount)
+    console.log('messagesReceived', messagesReceived)
 
-    console.log('fetching all messages for chat')
-    const chatMessages = fetchAllMessagesForChat(token, data.chatId);
-    const expectedIds = new Set(
-        chatMessages
-            .map((m) => String(m.id))
-    );
-
-    console.log('checking the expected ids')
-    console.log(`expected sample=${JSON.stringify(Array.from(expectedIds).slice(0,5))}`);
-    console.log(`received sample=${JSON.stringify(Array.from(receivedWsIds).slice(0,5))}`);
-    let missingCount = 0;
-    for (const id of expectedIds) {
-        if (!receivedWsIds.has(id)) missingCount += 1;
-    }
-    console.log('missing count', missingCount);
-
-    check(
-        {expected: expectedIds.size, received: receivedWsIds.size, missing: missingCount},
+    check({messagesCount, messagesReceived},
         {
-            "ws receiver: all run-tagged chat messages received": (r) => r.expected > 0 && r.missing === 0,
-        }
-    );
+            "ws receiver: all chat messages received": (i) => i.messagesCount === i.messagesReceived,
+        })
 }

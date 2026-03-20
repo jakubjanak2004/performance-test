@@ -81,3 +81,36 @@ export function sendMessage(token, chatId, msg, replyToId = null) {
     check(res, { "sendMessage: status 200": (r) => r.status === 200 });
     return res.status === 200 ? res.json() : null;
 }
+
+export function fetchAllMessagesForChat(token, chatId) {
+    const all = [];
+    let page = 0;
+    const size = 200;
+    while (true) {
+        const res = http.get(
+            `${BASE_URL}/chats/${chatId}/messages?page=${page}&size=${size}&sort=created,asc`,
+            {headers: {Authorization: `Bearer ${token}`}, tags: {name: "loadMessagesForChat"}}
+        );
+        if (res.status !== 200) break;
+        const content = res.json("content");
+        if (!Array.isArray(content) || content.length === 0) break;
+        all.push(...content);
+        const isLast = res.json("last");
+        if (isLast) break;
+        page += 1;
+    }
+    return all;
+}
+
+export function chatMessagesCount(token, chatId) {
+    const res = http.get(
+        `${BASE_URL}/chats/${chatId}/messages/count`,
+        {headers: {Authorization: `Bearer ${token}`}, tags: {name: "countMessagesForChat"}}
+    )
+
+    if (res.status !== 200) {
+        throw new Error("Failed to load the messages count")
+    }
+
+    return Number(res.body)
+}

@@ -16,9 +16,7 @@ export const WS_WAIT_TIMEOUT_MS = Number(__ENV.WS_WAIT_TIMEOUT_MS || 10000);
 
 // WebSocket + load test tuning (send_and_receive_messages.js)
 export const TEST_DURATION = __ENV.TEST_DURATION || "10s";
-export const WS_RECEIVER_VUS = Number(__ENV.WS_RECEIVER_VUS || 1);
-export const WS_RECEIVER_PING_SECONDS = Number(__ENV.WS_RECEIVER_PING_SECONDS || 15);
-
+export const WS_RECEIVER_VUS = Number(__ENV.WS_RECEIVER_VUS || 5);
 export const HTTP_TIMEOUT = __ENV.HTTP_TIMEOUT || '10s';
 
 export const OPTIONS = {
