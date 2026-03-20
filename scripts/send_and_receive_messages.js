@@ -13,20 +13,24 @@ import {loginOrSignup} from "../setup/auth.js";
 import {fetchAllMessagesForChat, randomId, stompFrame} from "../setup/ws.js";
 import {parseDurationSeconds} from "../setup/utils.js";
 
+const HTTP_SENDERS_START_SECONDS = 1;
+const TEST_DURATION_SECONDS = Math.max(1, Math.floor(parseDurationSeconds(TEST_DURATION)));
+const HTTP_SENDERS_DURATION_SECONDS = Math.max(1, TEST_DURATION_SECONDS - HTTP_SENDERS_START_SECONDS);
+
 // todo make vus grow gradually, steps
 export const options = {
     scenarios: {
         ws_receivers: {
             executor: "constant-vus",
             vus: WS_RECEIVER_VUS,
-            duration: TEST_DURATION,
+            duration: `${TEST_DURATION_SECONDS}s`,
             exec: "wsReceivers",
         },
         http_senders: {
             executor: "constant-vus",
             vus: WS_RECEIVER_VUS,
-            startTime: "1s",
-            duration: TEST_DURATION,
+            startTime: `${HTTP_SENDERS_START_SECONDS}s`,
+            duration: `${HTTP_SENDERS_DURATION_SECONDS}s`,
             exec: "httpSenders",
         },
     },
@@ -167,6 +171,7 @@ export function wsReceivers(data) {
     for (const id of expectedIds) {
         if (!receivedWsIds.has(id)) missingCount += 1;
     }
+    console.log('missing count', missingCount);
 
     check(
         {expected: expectedIds.size, received: receivedWsIds.size, missing: missingCount},
