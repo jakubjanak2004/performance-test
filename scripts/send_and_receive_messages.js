@@ -1,22 +1,20 @@
 import {
+    BUFFER_SECONDS,
+    HTTP_SENDERS_START_SECONDS,
     MESSAGES_PER_ITER,
     TEST_DURATION,
     TEST_USER_PREFIX,
     TEST_USER_USERNAME_START,
-    WS_RECEIVER_VUS
+    WS_RECEIVER_VUS, WS_SENDER_VUS
 } from "../setup/config.js";
 import {check, sleep} from "k6";
-import {chatMessagesCount, createChat, fetchAllMessagesForChat, sendMessage} from "../setup/chats.js";
+import {chatMessagesCount, createChat, sendMessage} from "../setup/chats.js";
 import {loginOrSignup} from "../setup/auth.js";
 import {connectToWsEndpoint, randomId} from "../setup/ws.js";
 import {parseDurationSeconds} from "../setup/utils.js";
 
-// todo move to config file
-const HTTP_SENDERS_START_SECONDS = 2;
-const BUFFER_SECONDS = 2;
 const testDurationReceiversSeconds = parseDurationSeconds(TEST_DURATION) + HTTP_SENDERS_START_SECONDS + BUFFER_SECONDS
 
-// todo make vus grow gradually, steps
 export const options = {
     scenarios: {
         ws_receivers: {
@@ -26,10 +24,15 @@ export const options = {
             exec: "wsReceivers",
         },
         http_senders: {
-            executor: "constant-vus",
-            vus: WS_RECEIVER_VUS,
+            executor: "ramping-vus",
             startTime: `${HTTP_SENDERS_START_SECONDS}s`,
-            duration: TEST_DURATION,
+            startVUs: 0,
+            stages: [
+                { duration: "2m", target: Math.ceil(WS_SENDER_VUS * 0.1) },
+                { duration: "2m", target: Math.ceil(WS_SENDER_VUS * 0.5) },
+                { duration: "2m", target: WS_SENDER_VUS },
+                { duration: "2m", target: 0 },
+            ],
             exec: "httpSenders",
         },
     },
@@ -37,11 +40,12 @@ export const options = {
 
 
 export function setup() {
+    const maxUsers = Math.max(WS_RECEIVER_VUS, WS_SENDER_VUS)
     // setup users
     const tokensByUsername = {};
     const memberUsernames = [];
 
-    for (let i = 0; i < WS_RECEIVER_VUS; i++) {
+    for (let i = 0; i < maxUsers; i++) {
         const username = `${TEST_USER_PREFIX}${Number(TEST_USER_USERNAME_START) + i}`;
         memberUsernames.push(username);
         tokensByUsername[username] = loginOrSignup(username);
@@ -85,10 +89,9 @@ export function httpSenders(data) {
         sendMessage(token, chatId, `${data.runTag}|vu=${__VU}|iter=${__ITER}|reply=${i}`, sentMessage.id);
     }
 
-    sleep(1);
+    sleep(0.2);
 }
 
-// todo split the test to two, the senders and receivers so that there could be a different number of both
 export function wsReceivers(data) {
     const username = data.memberUsernames[(__VU - 1) % data.memberUsernames.length];
     const token = data.tokensByUsername[username];
@@ -104,7 +107,6 @@ export function wsReceivers(data) {
         (message) => {
             if (message.id) {
                 // register incoming message
-                // console.log('username', username, 'message.id', message.id)
                 messagesReceived++;
             }
         },
@@ -119,11 +121,8 @@ export function wsReceivers(data) {
     check(res, {"ws connect: status 101": (r) => r && r.status === 101});
 
     const messagesCount = chatMessagesCount(token, data.chatId)
-    console.log('messagesCount', messagesCount)
-    console.log('messagesReceived', messagesReceived)
 
-    check({messagesCount, messagesReceived},
-        {
-            "ws receiver: all chat messages received": (i) => i.messagesCount === i.messagesReceived,
-        })
+    check({messagesCount, messagesReceived}, {
+        "ws receiver: all chat messages received": (i) => i.messagesCount === i.messagesReceived,
+    })
 }
