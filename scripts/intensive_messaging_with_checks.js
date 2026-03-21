@@ -28,16 +28,15 @@ export const options = {
             startTime: `${HTTP_SENDERS_START_SECONDS}s`,
             startVUs: 0,
             stages: [
-                { duration: "2m", target: Math.ceil(WS_SENDER_VUS * 0.1) },
-                { duration: "2m", target: Math.ceil(WS_SENDER_VUS * 0.5) },
-                { duration: "2m", target: WS_SENDER_VUS },
-                { duration: "2m", target: 0 },
+                {duration: "1m", target: Math.ceil(WS_SENDER_VUS * 0.1)},
+                {duration: "1m", target: Math.ceil(WS_SENDER_VUS * 0.5)},
+                {duration: "1m", target: WS_SENDER_VUS},
+                {duration: "1m", target: 0},
             ],
             exec: "httpSenders",
         },
     },
 };
-
 
 export function setup() {
     const maxUsers = Math.max(WS_RECEIVER_VUS, WS_SENDER_VUS)
@@ -89,7 +88,7 @@ export function httpSenders(data) {
         sendMessage(token, chatId, `${data.runTag}|vu=${__VU}|iter=${__ITER}|reply=${i}`, sentMessage.id);
     }
 
-    sleep(0.2);
+    sleep(Math.random() * 2);
 }
 
 export function wsReceivers(data) {

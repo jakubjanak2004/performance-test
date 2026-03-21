@@ -54,9 +54,11 @@ export function connectToWsEndpoint(token, username, destination, closeAfter, on
 
             socket.on("close", () => onClosed());
 
-            socket.setTimeout(() => {
-                socket.close();
-            }, closeAfter);
+            if (closeAfter > 0) {
+                socket.setTimeout(() => {
+                    socket.close();
+                }, closeAfter);
+            }
         }
     );
 }

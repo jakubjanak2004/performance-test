@@ -15,31 +15,6 @@ export function loadChats(token, opts={}) {
     return res;
 }
 
-export function ensureDirectChatId(senderToken, receiverUsername) {
-    const getRes = http.get(
-        `${BASE_URL}/chats/me/person/${encodeURIComponent(receiverUsername)}`,
-        { ...authHeaders(senderToken), tags: { name: "getChatWithPerson" } }
-    );
-
-    if (getRes.status === 200) {
-        return getRes.json("id");
-    }
-
-    const createPayload = JSON.stringify({
-        name: `k6-${TEST_USER_1_USERNAME}-${receiverUsername}`,
-        membersList: [receiverUsername],
-    });
-
-    const createRes = http.post(
-        `${BASE_URL}/chats/me`,
-        createPayload,
-        { ...authHeaders(senderToken), tags: { name: "createChat" } }
-    );
-
-    check(createRes, { "createChat: status 200": (r) => r.status === 200 });
-    return createRes.status === 200 ? createRes.json("id") : null;
-}
-
 /**
  * Create a group chat as the authenticated user (owner).
  *
@@ -80,6 +55,17 @@ export function sendMessage(token, chatId, msg, replyToId = null) {
 
     check(res, { "sendMessage: status 200": (r) => r.status === 200 });
     return res.status === 200 ? res.json() : null;
+}
+
+export function loadChatMessages(token, chatId, opts = {}) {
+    const res = http.get(`${BASE_URL}/chats/${chatId}/messages${buildQuery(opts)}`, {
+        ...authHeaders(token),
+        timeout: HTTP_TIMEOUT,
+    });
+    check(res, {
+        "loadChatMessages: status 200": (r) => r.status === 200,
+    });
+    return res;
 }
 
 export function fetchAllMessagesForChat(token, chatId) {

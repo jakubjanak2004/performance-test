@@ -6,7 +6,7 @@ set -euo pipefail
 #
 # Examples:
 #   ./run_tests.sh scripts/login_and_account_management.js
-#   ./run_tests.sh scripts/send_and_receive_messages.js
+#   ./run_tests.sh scripts/intensive_messaging_with_checks.js
 #
 # All test configuration defaults live in `setup/config.js`.
 # If you want to override something, pass env vars to this script

@@ -1,11 +1,10 @@
 import {loginOrSignup} from "../setup/auth.js";
 import {loadChats} from "../setup/chats.js";
 import {Rate} from 'k6/metrics';
+import {sleep} from "k6";
 import {loadProfile, loadUsers, updateProfile} from "../setup/users.js";
-import {OPTIONS, STEP_TIME, TEST_USER_PREFIX, TEST_USER_USERNAME_START} from "../setup/config.js";
+import {STEP_TIME, TEST_USER_PREFIX, TEST_USER_USERNAME_START} from "../setup/config.js";
 
-// todo determine if use round duration
-// const roundDuration = new Trend('round_duration');
 const roundFailRate = new Rate('round_fail_rate');
 
 export const options = {
@@ -42,10 +41,12 @@ export default function () {
     loadProfile(token)
 
     // change firstName, lastName, email
-    updateProfile(
-        token,
-        `toto new first name ${Math.random()}`,
-        `todo new last name ${Math.random()}`,
-        `newEmail${Math.random()}@gmail.com`
-    )
+    // updateProfile(
+    //     token,
+    //     `new first name ${Math.random()}`,
+    //     `new last name ${Math.random()}`,
+    //     `newEmail${Math.random()}@gmail.com`
+    // )
+
+    sleep(Math.random() * 2);
 }
